@@ -8,14 +8,16 @@ use RuntimeException;
 class SupabaseStorageService
 {
     private string $baseUrl;
+
     private string $serviceKey;
+
     private string $bucket;
 
     public function __construct()
     {
-        $this->baseUrl = rtrim((string) env('SUPABASE_URL'), '/');
-        $this->serviceKey = (string) env('SUPABASE_SERVICE_ROLE_KEY');
-        $this->bucket = (string) env('SUPABASE_STORAGE_BUCKET', 'uploads');
+        $this->baseUrl = rtrim((string) config('services.supabase.url'), '/');
+        $this->serviceKey = (string) config('services.supabase.service_role_key');
+        $this->bucket = (string) config('services.supabase.storage_bucket', 'uploads');
 
     }
 
@@ -24,14 +26,14 @@ class SupabaseStorageService
         $this->ensureConfigured();
 
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $this->serviceKey,
+            'Authorization' => 'Bearer '.$this->serviceKey,
             'apikey' => $this->serviceKey,
             'x-upsert' => 'true',
             'Content-Type' => $contentType,
         ])->withBody($contents, $contentType)
             ->post($this->objectUrl($path));
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             throw new RuntimeException('Supabase upload failed.');
         }
     }
@@ -41,11 +43,11 @@ class SupabaseStorageService
         $this->ensureConfigured();
 
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $this->serviceKey,
+            'Authorization' => 'Bearer '.$this->serviceKey,
             'apikey' => $this->serviceKey,
         ])->get($this->objectUrl($path));
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             throw new RuntimeException('Supabase download failed.');
         }
 
@@ -57,7 +59,7 @@ class SupabaseStorageService
         $this->ensureConfigured();
 
         Http::withHeaders([
-            'Authorization' => 'Bearer ' . $this->serviceKey,
+            'Authorization' => 'Bearer '.$this->serviceKey,
             'apikey' => $this->serviceKey,
         ])->delete($this->objectUrl($path));
     }
@@ -67,10 +69,10 @@ class SupabaseStorageService
         $this->ensureConfigured();
 
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $this->serviceKey,
+            'Authorization' => 'Bearer '.$this->serviceKey,
             'apikey' => $this->serviceKey,
             'Content-Type' => 'application/json',
-        ])->post($this->baseUrl . '/storage/v1/object/list/' . $this->bucket, [
+        ])->post($this->baseUrl.'/storage/v1/object/list/'.$this->bucket, [
             'prefix' => ltrim($prefix, '/'),
             'limit' => max(1, $limit),
             'offset' => max(0, $offset),
@@ -80,13 +82,13 @@ class SupabaseStorageService
             ],
         ]);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             throw new RuntimeException('Supabase list failed.');
         }
 
         $payload = $response->json();
 
-        if (!is_array($payload)) {
+        if (! is_array($payload)) {
             return [];
         }
 
@@ -124,7 +126,7 @@ class SupabaseStorageService
 
     private function objectUrl(string $path): string
     {
-        return $this->baseUrl . '/storage/v1/object/' . $this->bucket . '/' . ltrim($path, '/');
+        return $this->baseUrl.'/storage/v1/object/'.$this->bucket.'/'.ltrim($path, '/');
     }
 
     private function ensureConfigured(): void

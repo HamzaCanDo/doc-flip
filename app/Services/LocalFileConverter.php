@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use DOMDocument;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use DOMXPath;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
@@ -13,8 +15,6 @@ use PhpOffice\PhpSpreadsheet\IOFactory as SpreadsheetIOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Html as SpreadsheetHtmlWriter;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use Dompdf\Options;
-use Dompdf\Dompdf;
 use PhpOffice\PhpWord\IOFactory as WordIOFactory;
 use RuntimeException;
 use Smalot\PdfParser\Parser as PdfParser;
@@ -24,39 +24,43 @@ class LocalFileConverter
 {
     private const UPLOAD_TTL_SECONDS = 900;
 
-    public function __construct(private SupabaseStorageService $storage)
-    {
-    }
+    public function __construct(private SupabaseStorageService $storage) {}
 
     public function prepareUpload(UploadedFile $file): array
     {
         $ext = strtolower((string) $file->getClientOriginalExtension());
         $supported = ['docx', 'pdf', 'xlsx'];
 
-        if (!in_array($ext, $supported, true)) {
+        if (! in_array($ext, $supported, true)) {
             throw new RuntimeException('Unsupported file type. Please upload DOCX, PDF, or XLSX.');
         }
 
-        if ($ext === 'xlsx' && !class_exists('ZipArchive')) {
-            throw new RuntimeException('XLSX uploads require the PHP zip extension. Enable extension=zip and restart the server.');
+        if (in_array($ext, ['docx', 'xlsx'], true) && ! class_exists('ZipArchive')) {
+            throw new RuntimeException('Office document uploads require the PHP zip extension. Enable extension=zip and restart the server.');
         }
 
+        $this->assertValidFileSignature($file, $ext);
+
         $token = (string) Str::uuid();
-        $path = 'uploads/' . $token . '.' . $ext;
+        $path = 'uploads/'.$token.'.'.$ext;
         $contents = file_get_contents($file->getRealPath());
 
         if ($contents === false) {
             throw new RuntimeException('Unable to read the uploaded file.');
         }
 
-        $contentType = $file->getClientMimeType() ?: 'application/octet-stream';
+        $contentType = match ($ext) {
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'pdf' => 'application/pdf',
+        };
         $this->storage->upload($path, $contents, $contentType);
 
         $meta = [
             'token' => $token,
             'path' => $path,
             'type' => $ext,
-            'original_name' => $file->getClientOriginalName(),
+            'original_name' => $this->sanitizeOriginalName($file->getClientOriginalName()),
             'expires_at' => time() + self::UPLOAD_TTL_SECONDS,
         ];
 
@@ -88,7 +92,7 @@ class LocalFileConverter
         $meta = $this->getMeta($token);
         $allowed = $this->formatsForExtension($meta['type']);
 
-        if (!in_array($format, $allowed, true)) {
+        if (! in_array($format, $allowed, true)) {
             throw new RuntimeException('Unsupported export format for this file type.');
         }
 
@@ -184,7 +188,7 @@ class LocalFileConverter
     {
         $parsed = Cache::get($this->docxKey($meta['token']));
 
-        if (!$parsed) {
+        if (! $parsed) {
             $path = $this->downloadToTemp($meta['path']);
             $parsed = $this->parseDocx($path);
             Cache::put($this->docxKey($meta['token']), $parsed, self::UPLOAD_TTL_SECONDS);
@@ -198,7 +202,7 @@ class LocalFileConverter
     {
         $parsed = Cache::get($this->docxKey($meta['token']));
 
-        if (!$parsed) {
+        if (! $parsed) {
             $path = $this->downloadToTemp($meta['path']);
             $parsed = $this->parseDocx($path);
             Cache::put($this->docxKey($meta['token']), $parsed, self::UPLOAD_TTL_SECONDS);
@@ -212,7 +216,7 @@ class LocalFileConverter
     {
         $parsed = Cache::get($this->docxKey($meta['token']));
 
-        if (!$parsed) {
+        if (! $parsed) {
             $path = $this->downloadToTemp($meta['path']);
             $parsed = $this->parseDocx($path);
             Cache::put($this->docxKey($meta['token']), $parsed, self::UPLOAD_TTL_SECONDS);
@@ -274,9 +278,9 @@ class LocalFileConverter
     private function streamTablesToXlsx(array $tables, array $lines): StreamedResponse
     {
         return response()->streamDownload(function () use ($tables, $lines) {
-            $spreadsheet = new Spreadsheet();
+            $spreadsheet = new Spreadsheet;
 
-            if (!empty($tables)) {
+            if (! empty($tables)) {
                 $sheetIndex = 0;
 
                 foreach ($tables as $table) {
@@ -284,11 +288,11 @@ class LocalFileConverter
                         ? $spreadsheet->getActiveSheet()
                         : $spreadsheet->createSheet();
 
-                    $sheet->setTitle('Table ' . ($sheetIndex + 1));
+                    $sheet->setTitle('Table '.($sheetIndex + 1));
 
                     foreach ($table as $rowIndex => $row) {
                         foreach ($row as $colIndex => $value) {
-                            $cell = Coordinate::stringFromColumnIndex($colIndex + 1) . ($rowIndex + 1);
+                            $cell = Coordinate::stringFromColumnIndex($colIndex + 1).($rowIndex + 1);
                             $sheet->setCellValue($cell, $value);
                         }
                     }
@@ -300,7 +304,7 @@ class LocalFileConverter
                 $sheet->setTitle('Content');
 
                 foreach ($lines as $rowIndex => $line) {
-                    $cell = Coordinate::stringFromColumnIndex(1) . ($rowIndex + 1);
+                    $cell = Coordinate::stringFromColumnIndex(1).($rowIndex + 1);
                     $sheet->setCellValue($cell, $line);
                 }
             }
@@ -409,7 +413,7 @@ class LocalFileConverter
 
     private function parsePdfText(string $path): array
     {
-        $parser = new PdfParser();
+        $parser = new PdfParser;
         $pdf = $parser->parseFile($path);
         $text = $this->normalizeText($pdf->getText());
         $lines = $this->textToLines($text);
@@ -436,7 +440,7 @@ class LocalFileConverter
                 $empty = true;
 
                 for ($col = 1; $col <= $highestColIndex; $col++) {
-                    $cell = Coordinate::stringFromColumnIndex($col) . $row;
+                    $cell = Coordinate::stringFromColumnIndex($col).$row;
                     $value = $sheet->getCell($cell)->getFormattedValue();
                     $value = is_string($value) ? trim($value) : $value;
                     $rowValues[] = $value;
@@ -446,7 +450,7 @@ class LocalFileConverter
                     }
                 }
 
-                if (!$empty) {
+                if (! $empty) {
                     $rows[] = $rowValues;
                 }
             }
@@ -488,9 +492,9 @@ class LocalFileConverter
 
     private function loadHtml(string $html): DOMDocument
     {
-        $dom = new DOMDocument();
+        $dom = new DOMDocument;
         libxml_use_internal_errors(true);
-        $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html);
+        $dom->loadHTML('<?xml encoding="utf-8" ?>'.$html);
         libxml_clear_errors();
 
         return $dom;
@@ -510,12 +514,12 @@ class LocalFileConverter
                     $cells[] = $this->normalizeText($cell->textContent);
                 }
 
-                if (!empty($cells)) {
+                if (! empty($cells)) {
                     $rows[] = $cells;
                 }
             }
 
-            if (!empty($rows)) {
+            if (! empty($rows)) {
                 $tables[] = $rows;
             }
         }
@@ -571,15 +575,58 @@ class LocalFileConverter
         return $tmp;
     }
 
+    private function assertValidFileSignature(UploadedFile $file, string $extension): void
+    {
+        $path = $file->getRealPath();
+        $handle = is_string($path) ? @fopen($path, 'rb') : false;
+
+        if (! is_string($path) || ! is_resource($handle)) {
+            throw new RuntimeException('Unable to inspect the uploaded file.');
+        }
+
+        $header = fread($handle, 8);
+        fclose($handle);
+
+        $isPdf = is_string($header) && str_starts_with($header, '%PDF-');
+        $isZip = is_string($header) && in_array(substr($header, 0, 4), ["PK\x03\x04", "PK\x05\x06", "PK\x07\x08"], true);
+
+        if (($extension === 'pdf' && ! $isPdf) || (in_array($extension, ['docx', 'xlsx'], true) && ! $isZip)) {
+            throw new RuntimeException('The uploaded file content does not match its file type.');
+        }
+
+        if ($isZip && in_array($extension, ['docx', 'xlsx'], true)) {
+            $archive = new \ZipArchive;
+            if ($archive->open($path) !== true) {
+                throw new RuntimeException('The uploaded file is not a valid office document.');
+            }
+
+            $requiredEntry = $extension === 'docx' ? 'word/document.xml' : 'xl/workbook.xml';
+            $isValid = $archive->locateName($requiredEntry) !== false;
+            $archive->close();
+
+            if (! $isValid) {
+                throw new RuntimeException('The uploaded file is not a valid office document.');
+            }
+        }
+    }
+
+    private function sanitizeOriginalName(string $name): string
+    {
+        $name = str_replace(["\0", '/', '\\'], '', $name);
+        $name = preg_replace('/[\x00-\x1F\x7F]+/', '', $name) ?? '';
+
+        return trim(basename($name)) ?: 'uploaded-document';
+    }
+
     private function renderPdfFromHtml(string $html, string $orientation): string
     {
-        $options = new Options();
+        $options = new Options;
         $options->setIsRemoteEnabled(false);
         $options->setChroot(public_path());
 
         $fontDir = public_path('fonts/static');
         $fontCache = storage_path('framework/cache/dompdf');
-        if (!is_dir($fontCache)) {
+        if (! is_dir($fontCache)) {
             @mkdir($fontCache, 0755, true);
         }
 
@@ -601,25 +648,25 @@ class LocalFileConverter
     {
         $regularPath = 'fonts/static/NotoSansBengali-Regular.ttf';
         $boldPath = 'fonts/static/NotoSansBengali-Bold.ttf';
-        $css = "<style>body{font-family:'" . $fontName . "',sans-serif;}";
+        $css = "<style>body{font-family:'".$fontName."',sans-serif;}";
 
         if ($fontName === 'NotoSansBengali') {
-            $css .= "@font-face{font-family:'NotoSansBengali';src:url('" . $regularPath . "') format('truetype');font-weight:400;font-style:normal;}";
-            $css .= "@font-face{font-family:'NotoSansBengali';src:url('" . $boldPath . "') format('truetype');font-weight:700;font-style:normal;}";
+            $css .= "@font-face{font-family:'NotoSansBengali';src:url('".$regularPath."') format('truetype');font-weight:400;font-style:normal;}";
+            $css .= "@font-face{font-family:'NotoSansBengali';src:url('".$boldPath."') format('truetype');font-weight:700;font-style:normal;}";
         }
 
         $css .= '</style>';
 
         if (stripos($html, '<head') !== false) {
-            return preg_replace('/<head(.*?)>/', '<head$1>' . $css, $html, 1) ?: $css . $html;
+            return preg_replace('/<head(.*?)>/', '<head$1>'.$css, $html, 1) ?: $css.$html;
         }
 
-        return $css . $html;
+        return $css.$html;
     }
 
     private function getPdfFontName(string $fontDir): string
     {
-        $regular = $fontDir . DIRECTORY_SEPARATOR . 'NotoSansBengali-Regular.ttf';
+        $regular = $fontDir.DIRECTORY_SEPARATOR.'NotoSansBengali-Regular.ttf';
 
         return file_exists($regular) ? 'NotoSansBengali' : 'DejaVu Sans';
     }
@@ -628,7 +675,7 @@ class LocalFileConverter
     {
         $meta = Cache::get($this->metaKey($token));
 
-        if (!$meta || !isset($meta['expires_at']) || $meta['expires_at'] < time()) {
+        if (! $meta || ! isset($meta['expires_at']) || $meta['expires_at'] < time()) {
             if ($meta && isset($meta['path'])) {
                 $this->storage->delete($meta['path']);
             }
@@ -702,15 +749,15 @@ class LocalFileConverter
                 continue;
             }
 
-            $blocks[] = '# Sheet: ' . $sheet['name'];
+            $blocks[] = '# Sheet: '.$sheet['name'];
 
             $header = array_map([$this, 'escapeMarkdownCell'], $rows[0]);
-            $blocks[] = '| ' . implode(' | ', $header) . ' |';
-            $blocks[] = '| ' . implode(' | ', array_fill(0, count($header), '---')) . ' |';
+            $blocks[] = '| '.implode(' | ', $header).' |';
+            $blocks[] = '| '.implode(' | ', array_fill(0, count($header), '---')).' |';
 
             foreach (array_slice($rows, 1) as $row) {
                 $cells = array_map([$this, 'escapeMarkdownCell'], $row);
-                $blocks[] = '| ' . implode(' | ', $cells) . ' |';
+                $blocks[] = '| '.implode(' | ', $cells).' |';
             }
 
             $blocks[] = '';
@@ -729,21 +776,21 @@ class LocalFileConverter
 
     private function metaKey(string $token): string
     {
-        return 'upload:meta:' . $token;
+        return 'upload:meta:'.$token;
     }
 
     private function docxKey(string $token): string
     {
-        return 'upload:docx:' . $token;
+        return 'upload:docx:'.$token;
     }
 
     private function pdfKey(string $token): string
     {
-        return 'upload:pdf:' . $token;
+        return 'upload:pdf:'.$token;
     }
 
     private function xlsxKey(string $token): string
     {
-        return 'upload:xlsx:' . $token;
+        return 'upload:xlsx:'.$token;
     }
 }

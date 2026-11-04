@@ -8,8 +8,8 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-$olderThanMinutes = (int) env('UPLOAD_SWEEP_AGE_MINUTES', 60);
+$olderThanMinutes = (int) config('services.upload_sweep_age_minutes', 60);
 $olderThanMinutes = $olderThanMinutes > 0 ? $olderThanMinutes : 60;
 
-Schedule::command('uploads:cleanup --older-than=' . $olderThanMinutes)
+Schedule::command('uploads:cleanup --older-than='.$olderThanMinutes)
     ->hourly();

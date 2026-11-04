@@ -35,7 +35,7 @@ class CleanupSupabaseUploads extends Command
             $prefix = 'uploads/';
         }
 
-        if (!str_ends_with($prefix, '/')) {
+        if (! str_ends_with($prefix, '/')) {
             $prefix .= '/';
         }
 
@@ -53,7 +53,7 @@ class CleanupSupabaseUploads extends Command
         $candidates = [];
 
         foreach ($objects as $object) {
-            if (!is_array($object)) {
+            if (! is_array($object)) {
                 continue;
             }
 
@@ -62,10 +62,10 @@ class CleanupSupabaseUploads extends Command
                 continue;
             }
 
-            $path = str_starts_with($name, $prefix) ? $name : $prefix . ltrim($name, '/');
+            $path = str_starts_with($name, $prefix) ? $name : $prefix.ltrim($name, '/');
 
             $timestamp = $object['updated_at'] ?? $object['created_at'] ?? $object['last_accessed_at'] ?? null;
-            if (!is_string($timestamp) || $timestamp === '') {
+            if (! is_string($timestamp) || $timestamp === '') {
                 continue;
             }
 
@@ -100,7 +100,7 @@ class CleanupSupabaseUploads extends Command
             }, $candidates);
 
             $this->table(['Path', 'Updated At'], $preview);
-            $this->info('Dry run: ' . count($candidates) . ' file(s) would be deleted.');
+            $this->info('Dry run: '.count($candidates).' file(s) would be deleted.');
 
             return self::SUCCESS;
         }
@@ -114,11 +114,11 @@ class CleanupSupabaseUploads extends Command
                 $deleted++;
             } catch (\Throwable $e) {
                 $failed++;
-                $this->warn('Failed to delete ' . $candidate['path'] . ': ' . $e->getMessage());
+                $this->warn('Failed to delete '.$candidate['path'].': '.$e->getMessage());
             }
         }
 
-        $this->info('Cleanup completed. Deleted: ' . $deleted . ', Failed: ' . $failed . '.');
+        $this->info('Cleanup completed. Deleted: '.$deleted.', Failed: '.$failed.'.');
 
         return $failed > 0 ? self::FAILURE : self::SUCCESS;
     }

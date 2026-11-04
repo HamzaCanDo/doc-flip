@@ -1,0 +1,4 @@
+---
+deployment:
+  tasks:
+    - DEPLOYPATH=/home/kitbinto/doc-converter PUBLICPATH=/home/kitbinto/public_html/docflip /bin/bash .cpanel/deploy.sh

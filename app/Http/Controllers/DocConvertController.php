@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Services\GoogleDocConverter;
 use App\Services\LocalFileConverter;
-use App\Http\Controllers\Controller;
 use Google_Service_Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
@@ -15,9 +14,7 @@ class DocConvertController extends Controller
     public function __construct(
         private GoogleDocConverter $converter,
         private LocalFileConverter $localConverter
-    )
-    {
-    }
+    ) {}
 
     public function index()
     {
@@ -52,7 +49,7 @@ class DocConvertController extends Controller
             $defaultFormat = $upload['formats'][0] ?? null;
 
             if ($requestedFormat) {
-                if (!in_array($requestedFormat, $upload['formats'], true)) {
+                if (! in_array($requestedFormat, $upload['formats'], true)) {
                     if ($request->expectsJson() || $request->ajax()) {
                         return response()->json([
                             'message' => 'Selected format is not available for this file type.',
@@ -159,7 +156,7 @@ class DocConvertController extends Controller
 
     public function download(string $fileId, string $format)
     {
-        if (!preg_match('/^[a-zA-Z0-9_-]{10,}$/', $fileId)) {
+        if (! preg_match('/^[a-zA-Z0-9_-]{10,}$/', $fileId)) {
             abort(404);
         }
 

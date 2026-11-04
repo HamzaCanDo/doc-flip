@@ -3,7 +3,18 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>DocFlip</title>
+    <title>DocFlip — Online Document Converter</title>
+    <meta name="description" content="Convert public Google Docs links and DOCX, PDF, or XLSX files into useful formats with DocFlip." />
+    <link rel="canonical" href="https://kitbin.top/docflip/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://kitbin.top/docflip/" />
+    <meta property="og:title" content="DocFlip — Online Document Converter" />
+    <meta property="og:description" content="Convert public Google Docs links and supported document files online." />
+    <meta property="og:image" content="https://kitbin.top/docflip/assets/global-logos/hero/hero-640x192.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="DocFlip — Online Document Converter" />
+    <meta name="twitter:description" content="Convert public Google Docs links and supported document files online." />
+    <meta name="twitter:image" content="https://kitbin.top/docflip/assets/global-logos/hero/hero-640x192.png" />
     <link rel="icon" href="{{ asset('assets/global-logos/favicon/favicon.ico') }}" sizes="any" />
     <link rel="shortcut icon" href="{{ asset('assets/global-logos/favicon/favicon.ico') }}" />
     <link rel="icon" href="{{ asset('assets/global-logos/favicon/favicon-16x16.png') }}" sizes="16x16" type="image/png" />

@@ -18,19 +18,35 @@ class GoogleDocConverter
 {
     private const HTML_CACHE_TTL_SECONDS = 300;
 
-    private Google_Service_Drive $drive;
+    private ?Google_Service_Drive $drive = null;
 
-    public function __construct()
+    private function drive(): Google_Service_Drive
     {
-        $client = new Google_Client();
-        $client->setAuthConfig(storage_path('app/google-auth.json'));
+        if ($this->drive instanceof Google_Service_Drive) {
+            return $this->drive;
+        }
+
+        $credentialsPath = storage_path('app/google-auth.json');
+
+        if (! is_file($credentialsPath)) {
+            throw new RuntimeException('Google Drive authentication is not configured.');
+        }
+
+        $client = new Google_Client;
+        $client->setAuthConfig($credentialsPath);
         $client->setScopes([Google_Service_Drive::DRIVE_READONLY]);
 
-        $this->drive = new Google_Service_Drive($client);
+        return $this->drive = new Google_Service_Drive($client);
     }
 
     public function extractFileIdFromUrl(string $url): string
     {
+        $host = parse_url($url, PHP_URL_HOST);
+
+        if (! is_string($host) || ! in_array(strtolower($host), ['docs.google.com', 'drive.google.com'], true)) {
+            throw new RuntimeException('Please provide a valid Google Docs URL.');
+        }
+
         $patterns = [
             '~/(?:document|spreadsheets|presentation)/d/([a-zA-Z0-9_-]{10,})~',
             '~[?&]id=([a-zA-Z0-9_-]{10,})~',
@@ -89,18 +105,19 @@ class GoogleDocConverter
 
     private function streamDriveExport(string $fileId, string $mime, string $filename): StreamedResponse
     {
-        $response = $this->drive->files->export($fileId, $mime, ['alt' => 'media']);
+        $response = $this->drive()->files->export($fileId, $mime, ['alt' => 'media']);
 
         return response()->streamDownload(function () use ($response) {
             if (is_string($response)) {
                 echo $response;
+
                 return;
             }
 
             if (method_exists($response, 'getBody')) {
                 $stream = $response->getBody();
 
-                while (!$stream->eof()) {
+                while (! $stream->eof()) {
                     echo $stream->read(1048576);
                 }
 
@@ -154,9 +171,9 @@ class GoogleDocConverter
         return response()->streamDownload(function () use ($fileId) {
             $parsed = $this->getParsedExport($fileId);
 
-            $spreadsheet = new Spreadsheet();
+            $spreadsheet = new Spreadsheet;
 
-            if (!empty($parsed['tables'])) {
+            if (! empty($parsed['tables'])) {
                 $sheetIndex = 0;
 
                 foreach ($parsed['tables'] as $table) {
@@ -164,11 +181,11 @@ class GoogleDocConverter
                         ? $spreadsheet->getActiveSheet()
                         : $spreadsheet->createSheet();
 
-                    $sheet->setTitle('Table ' . ($sheetIndex + 1));
+                    $sheet->setTitle('Table '.($sheetIndex + 1));
 
                     foreach ($table as $rowIndex => $row) {
                         foreach ($row as $colIndex => $value) {
-                            $cell = Coordinate::stringFromColumnIndex($colIndex + 1) . ($rowIndex + 1);
+                            $cell = Coordinate::stringFromColumnIndex($colIndex + 1).($rowIndex + 1);
                             $sheet->setCellValue($cell, $value);
                         }
                     }
@@ -180,7 +197,7 @@ class GoogleDocConverter
                 $sheet->setTitle('Content');
 
                 foreach ($parsed['lines'] as $rowIndex => $line) {
-                    $cell = Coordinate::stringFromColumnIndex(1) . ($rowIndex + 1);
+                    $cell = Coordinate::stringFromColumnIndex(1).($rowIndex + 1);
                     $sheet->setCellValue($cell, $line);
                 }
             }
@@ -198,7 +215,7 @@ class GoogleDocConverter
 
     private function exportToString(string $fileId, string $mime): string
     {
-        $response = $this->drive->files->export($fileId, $mime, ['alt' => 'media']);
+        $response = $this->drive()->files->export($fileId, $mime, ['alt' => 'media']);
 
         if (is_string($response)) {
             return $response;
@@ -213,7 +230,7 @@ class GoogleDocConverter
 
     private function getHtmlExport(string $fileId): string
     {
-        $cacheKey = 'doc-converter:html:' . $fileId;
+        $cacheKey = 'doc-converter:html:'.$fileId;
 
         return Cache::remember($cacheKey, self::HTML_CACHE_TTL_SECONDS, function () use ($fileId) {
             return $this->exportToString($fileId, 'text/html');
@@ -222,7 +239,7 @@ class GoogleDocConverter
 
     private function getParsedExport(string $fileId): array
     {
-        $cacheKey = 'doc-converter:parsed:' . $fileId;
+        $cacheKey = 'doc-converter:parsed:'.$fileId;
 
         return Cache::remember($cacheKey, self::HTML_CACHE_TTL_SECONDS, function () use ($fileId) {
             $html = $this->getHtmlExport($fileId);
@@ -254,9 +271,9 @@ class GoogleDocConverter
 
     private function loadHtml(string $html): DOMDocument
     {
-        $dom = new DOMDocument();
+        $dom = new DOMDocument;
         libxml_use_internal_errors(true);
-        $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html);
+        $dom->loadHTML('<?xml encoding="utf-8" ?>'.$html);
         libxml_clear_errors();
 
         return $dom;
@@ -276,12 +293,12 @@ class GoogleDocConverter
                     $cells[] = $this->normalizeText($cell->textContent);
                 }
 
-                if (!empty($cells)) {
+                if (! empty($cells)) {
                     $rows[] = $cells;
                 }
             }
 
-            if (!empty($rows)) {
+            if (! empty($rows)) {
                 $tables[] = $rows;
             }
         }
