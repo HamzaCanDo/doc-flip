@@ -1,4 +1,4 @@
 ---
 deployment:
   tasks:
-    - DEPLOYPATH=/home/kinbinto/doc-converter PUBLICPATH=/home/kinbinto/public_html/doc-converter /bin/bash .cpanel/deploy.sh
+    - DEPLOYPATH=/home/kitbinto/doc-converter PUBLICPATH=/home/kitbinto/public_html/doc-converter /bin/bash .cpanel/deploy.sh
